@@ -1,6 +1,6 @@
-from lib.util import from_business_dt
+from nse_client.util import from_business_dt
 
-from lib.http_client import HttpClient
+from nse_client.http_client import HttpClient
 import asyncio
 
 

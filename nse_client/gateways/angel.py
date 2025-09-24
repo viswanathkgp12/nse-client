@@ -1,4 +1,4 @@
-from lib.http_client import HttpClient
+from nse_client.http_client import HttpClient
 
 
 class AngelBrokingGateway:

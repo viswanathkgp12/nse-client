@@ -1,7 +1,7 @@
 import asyncio
 import json
 
-from lib import NseGateway, ChartInterval
+from nse_client import NseGateway, ChartInterval
 from datetime import date
 
 

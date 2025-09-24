@@ -11,19 +11,19 @@ from tenacity import (
     stop_after_attempt,
     wait_fixed,
 )
-from lib.gateways.types import CandleData, CandleDataList, EarningResult
+from nse_client.gateways.types import CandleData, CandleDataList, EarningResult
 
-from lib.constants import (
+from nse_client.constants import (
     CHART_DATA_URL,
     CHART_HEADERS,
     FIVE_AND_HALF_HOURS_IN_SECS,
     ChartInterval,
     NSE_HEADERS,
 )
-from lib.gateways.angel import AngelBrokingGateway
-from lib.gateways.moneycontrol import MoneyControlGateway
-from lib.http_client import HttpClient
-from lib.util import to_epoch
+from nse_client.gateways.angel import AngelBrokingGateway
+from nse_client.gateways.moneycontrol import MoneyControlGateway
+from nse_client.http_client import HttpClient
+from nse_client.util import to_epoch
 
 logger = logging.getLogger(__name__)
 
@@ -49,11 +49,12 @@ class NseGateway:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.moneycontrol.client.close()
         await self.client.close()
 
     async def fetch_scrips(self, force=False):
         angel_data_path = os.path.join(os.path.dirname(__file__), "angel-data.json")
-        if force:
+        if not os.path.exists(angel_data_path) or force:
             data = await self.angel.list_instruments()
             with open(angel_data_path, "w") as f:
                 f.write(json.dumps(data))
