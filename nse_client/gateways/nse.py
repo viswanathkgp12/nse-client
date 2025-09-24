@@ -129,6 +129,9 @@ class NseGateway:
         if data.get("isETFSec", False):
             logger.warning(f"ETF {symbol} does not have an industry")
             return None
+        if "industry" not in data:
+            logger.warning(f"{symbol} does not have an industry")
+            return None
         return data["industry"]
 
     async def candle(
@@ -204,45 +207,52 @@ class NseGateway:
         interval: ChartInterval,
         from_dt: date,
         to_dt: date,
-        max_concurrent_requests: int = 25,
+        batch_size: int = 25,
         max_retries: int = 3,
         retry_delay: float = 1.0,
+        sleep_delay: float = 0.25,
     ) -> CandleDataList:
-        semaphore = asyncio.Semaphore(max_concurrent_requests)
+        all_results = []
+        failed_names = []
 
-        async def _fetch(symbol: str):
-            try:
-                async for attempt in AsyncRetrying(
-                    stop=stop_after_attempt(max_retries),
-                    wait=wait_fixed(retry_delay),
-                    reraise=True,
-                ):
-                    with attempt:
-                        async with semaphore:
+        # Process symbols in batches
+        for i in range(0, len(symbols), batch_size):
+            batch_symbols = symbols[i : i + batch_size]
+            logger.info(f"Processing symbols from {i} to {i + batch_size}...")
+
+            async def _fetch(symbol: str):
+                try:
+                    async for attempt in AsyncRetrying(
+                        stop=stop_after_attempt(max_retries),
+                        wait=wait_fixed(retry_delay),
+                        reraise=True,
+                    ):
+                        with attempt:
                             data: CandleData = await self.candle(
                                 symbol, interval, from_dt, to_dt
                             )
                             if data is None:
                                 raise ConnectionError(f"No data received for {symbol}")
                             return symbol, data
-            except Exception as e:
-                logger.warning(
-                    f"[{interval}] Failed to get data for {symbol} after {max_retries} retries: {e}"
-                )
-                return symbol, None
+                except Exception as e:
+                    logging.warning(
+                        f"[{interval}] Failed to get data for {symbol} after {max_retries} retries: {e}"
+                    )
+                    return symbol, None
 
-        tasks = [_fetch(symbol) for symbol in symbols]
-        fetched_results = await asyncio.gather(*tasks)
+            tasks = [_fetch(symbol) for symbol in batch_symbols]
+            fetched_results = await asyncio.gather(*tasks)
 
-        responses = []
-        failed_names = []
-        for symbol, data in fetched_results:
-            if data is None:
-                failed_names.append(symbol)
-                continue
-            responses.append({"symbol": symbol, "data": data})
+            for symbol, data in fetched_results:
+                if data is None:
+                    failed_names.append(symbol)
+                    continue
+                all_results.append({"symbol": symbol, "data": data})
+
+            if i + batch_size < len(symbols):
+                await asyncio.sleep(sleep_delay)
 
         return {
             "failed": failed_names,
-            "results": responses,
+            "results": all_results,
         }
