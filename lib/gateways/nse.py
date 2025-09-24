@@ -1,5 +1,4 @@
 import asyncio
-import io
 import json
 import logging
 import os
@@ -7,23 +6,22 @@ from datetime import date
 from typing import Optional
 from urllib.parse import quote_plus
 
-import pandas as pd
 from tenacity import (
     AsyncRetrying,
     stop_after_attempt,
     wait_fixed,
 )
-from lib.gateways.types import CandleData, CandleDataList
+from lib.gateways.types import CandleData, CandleDataList, EarningResult
 
 from lib.constants import (
     CHART_DATA_URL,
     CHART_HEADERS,
     FIVE_AND_HALF_HOURS_IN_SECS,
-    INDEX_CSV_URLS,
     ChartInterval,
     NSE_HEADERS,
 )
 from lib.gateways.angel import AngelBrokingGateway
+from lib.gateways.moneycontrol import MoneyControlGateway
 from lib.http_client import HttpClient
 from lib.util import to_epoch
 
@@ -38,8 +36,12 @@ class NseClient(HttpClient):
 class NseGateway:
     def __init__(self):
         self.angel = AngelBrokingGateway()
+        self.moneycontrol = MoneyControlGateway()
         self.client = NseClient(headers=NSE_HEADERS)
         self.nse_scrip_codes = {}
+
+        self.nse_indices = set()
+        self.nse_fno_stocks = set()
 
     async def __aenter__(self):
         await self.fetch_scrips()
@@ -63,25 +65,34 @@ class NseGateway:
             exchange = each["exch_seg"]
             name = each["name"]
             token = each["token"]
+            instrument_type = each["instrumenttype"]
 
-            if exchange != "NSE":
-                continue
+            if exchange == "NFO" and instrument_type == "OPTSTK":
+                self.nse_fno_stocks.add(name)
+            elif exchange == "NSE":
+                self.nse_scrip_codes[name] = token
+                if instrument_type == "AMXIDX":
+                    self.nse_indices.add(name)
+            continue
 
-            self.nse_scrip_codes[name] = token
+    def fno_stocks(self):
+        return list(self.nse_fno_stocks)
 
-    async def _read_symbols(self, url: str) -> list[str]:
-        data = await self.client.get(url, mode="str")
-        df = pd.read_csv(io.StringIO(data))
-        return df["Symbol"].tolist()
+    def indices(self):
+        return list(self.nse_indices)
 
-    async def small_cap_250_symbols(self) -> list[str]:
-        return await self._read_symbols(INDEX_CSV_URLS["small_cap_250"])
+    async def symbols_by_index(self, symbol: str):
+        if symbol not in self.nse_indices:
+            raise ValueError(f"{symbol} not an index!!!")
 
-    async def mid_cap_150_symbols(self) -> list[str]:
-        return await self._read_symbols(INDEX_CSV_URLS["mid_cap_150"])
-
-    async def mid_small_cap_400_symbols(self) -> list[str]:
-        return await self._read_symbols(INDEX_CSV_URLS["mid_small_cap_400"])
+        orig = symbol
+        symbol = quote_plus(symbol)
+        data = await self.client.get(
+            f"https://www.nseindia.com/api/equity-stockIndices?index={symbol}"
+        )
+        symbols = [s["symbol"] for s in data["data"]]
+        filtered_symbols = [s for s in symbols if s != orig]
+        return filtered_symbols
 
     async def price_band(self, symbol: str) -> str:
         """Get the price band for a given symbol."""
@@ -90,6 +101,9 @@ class NseGateway:
             f"https://www.nseindia.com/api/quote-equity?symbol={symbol}"
         )
         return data["priceInfo"]["pPriceBand"]
+
+    async def recent_earnings(self) -> list[EarningResult]:
+        return await self.moneycontrol.earnings()
 
     async def insider_trades(self, symbol: str) -> list[dict]:
         """Get insider trading data for a given symbol."""

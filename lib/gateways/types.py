@@ -1,4 +1,5 @@
 from typing import List, TypedDict
+from datetime import date
 
 
 class CandleData(TypedDict):
@@ -18,3 +19,10 @@ class CandleDataListItem(TypedDict):
 class CandleDataList(TypedDict):
     failed: List[str]
     results: List[CandleDataListItem]
+
+
+class EarningResult(TypedDict):
+    name: str
+    profit_pct: str
+    results_dt: date
+    symbol: str

@@ -7,15 +7,18 @@ A Python library for interacting with the National Stock Exchange (NSE) of India
 Download the latest `.whl` file from releases. Next install using:
 
 ```bash
-pip install nse_client-0.1.0-py3-none-any.whl
+pip install nse_client-0.2.0-py3-none-any.whl
 ```
 
 ## Features
-- Get price band for a symbol(2%/5%/10%/20%)
+
+- Get price band for a symbol(`2%`/`5%`/`10%`/`20%`/`No Band`). Stocks with derivatives have `No Band`.
 - Get basic industry for a symbol
-- Get candle data(15m/1h/4h/1d/1w). **NOTE:** NSE doesn't adjust historical data for stock splits/dividends etc.
+- Get historical candle data(`15m`/`1h`/`4h`/`1d`/`1w`). **NOTE:** NSE doesn't adjust historical data for stock splits/dividends etc.
 - Get insider trades for symbol
-- List smallcap250/midcap150/midsmall400 constituent symbols
+- List indices and index constituent symbols
+- List fno stocks
+- List recent earnings(from MoneyControl)
 
 ## Usage
 

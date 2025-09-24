@@ -7,7 +7,13 @@ from datetime import date
 
 async def main():
     async with NseGateway() as gateway:
-        symbols = await gateway.small_cap_250_symbols()
+        earnings = await gateway.recent_earnings()
+        print(f"Earnings: {earnings}")
+
+        indices = gateway.indices()
+        print(f"Indices: {indices}")
+
+        symbols = await gateway.symbols_by_index("NIFTY IT")
         print(f"Symbols: {symbols}")
 
         symbol = symbols[0]

@@ -37,9 +37,3 @@ CHART_HEADERS = {
     "Sec-GPC": "1",
     "TE": "trailers",
 }
-
-INDEX_CSV_URLS = {
-    "small_cap_250": "https://nsearchives.nseindia.com/content/indices/ind_niftysmallcap250list.csv",
-    "mid_cap_150": "https://nsearchives.nseindia.com/content/indices/ind_niftymidcap150list.csv",
-    "mid_small_cap_400": "https://nsearchives.nseindia.com/content/indices/ind_niftymidsmallcap400list.csv",
-}
