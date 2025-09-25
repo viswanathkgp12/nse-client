@@ -7,7 +7,7 @@ A Python library for interacting with the National Stock Exchange (NSE) of India
 Download the latest `.whl` file from releases. Next install using:
 
 ```bash
-pip install nse_client-0.4.0-py3-none-any.whl
+pip install nse_client-0.5.0-py3-none-any.whl
 ```
 
 ## Features
@@ -23,15 +23,6 @@ pip install nse_client-0.4.0-py3-none-any.whl
 ## Usage
 
 - Check `examples` folder
-
-## Note
-
-- `NseGateway` uses scrip codes to fetch candle data for stocks/indices. `NseGateway` class fetch and cache scrip codes in a JSON file during initialization. To ensure newly listed stocks are included, it’s recommended to periodically update the scrip codes. To do so:
-
-```
-async with NseGateway() as gateway:
-    await gateway.fetch_scrips(force=True)
-```
 
 ## License
 

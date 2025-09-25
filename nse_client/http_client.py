@@ -11,8 +11,9 @@ logger = logging.getLogger(__name__)
 
 
 class HttpClient:
-    def __init__(self, headers=None, timeout=5):
+    def __init__(self, base_url=None, headers=None, timeout=5):
         self.session = aiohttp.ClientSession(
+            base_url=base_url,
             headers=headers,
             timeout=ClientTimeout(total=timeout),
         )

@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 import json
 import logging
 import os
@@ -19,10 +20,12 @@ from nse_client.constants import (
     FIVE_AND_HALF_HOURS_IN_SECS,
     ChartInterval,
     NSE_HEADERS,
+    NSE_BASE_URL,
 )
 from nse_client.gateways.angel import AngelBrokingGateway
 from nse_client.gateways.moneycontrol import MoneyControlGateway
 from nse_client.http_client import HttpClient
+from nse_client.scrip_fetcher import ScripFetcher
 from nse_client.util import to_epoch
 
 logger = logging.getLogger(__name__)
@@ -30,67 +33,45 @@ logger = logging.getLogger(__name__)
 
 class NseClient(HttpClient):
     async def initialize_session(self):
-        await self.get("https://www.nseindia.com/option-chain", mode="str")
+        await self.get("/option-chain", mode="str")
 
 
 class NseGateway:
     def __init__(self):
-        self.angel = AngelBrokingGateway()
-        self.moneycontrol = MoneyControlGateway()
-        self.client = NseClient(headers=NSE_HEADERS)
-        self.nse_scrip_codes = {}
-
-        self.nse_indices = set()
-        self.nse_fno_stocks = set()
+        self._angel = AngelBrokingGateway()
+        self._moneycontrol = MoneyControlGateway()
+        self._scrip_fetcher = ScripFetcher(angel=self._angel)
+        self._client = NseClient(base_url=NSE_BASE_URL, headers=NSE_HEADERS)
 
     async def __aenter__(self):
-        await self.fetch_scrips()
-        await self.client.initialize_session()
+        await self._scrip_fetcher.fetch()
+        await self._client.initialize_session()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.moneycontrol.client.close()
-        await self.client.close()
+        await self._moneycontrol.client.close()
+        await self._client.close()
 
-    async def fetch_scrips(self, force=False):
-        angel_data_path = os.path.join(os.path.dirname(__file__), "angel-data.json")
-        if not os.path.exists(angel_data_path) or force:
-            data = await self.angel.list_instruments()
-            with open(angel_data_path, "w") as f:
-                f.write(json.dumps(data))
-        else:
-            with open(angel_data_path, "r") as f:
-                data = json.loads(f.read().encode())
+    async def fno_stocks(self):
+        return self._scrip_fetcher.nse_fno_stocks
 
-        for each in data:
-            exchange = each["exch_seg"]
-            name = each["name"]
-            token = each["token"]
-            instrument_type = each["instrumenttype"]
+    async def etf(self):
+        data = await self._client.get("/api/etf")
+        return [s["symbol"] for s in data["data"]]
 
-            if exchange == "NFO" and instrument_type == "OPTSTK":
-                self.nse_fno_stocks.add(name)
-            elif exchange == "NSE":
-                self.nse_scrip_codes[name] = token
-                if instrument_type == "AMXIDX":
-                    self.nse_indices.add(name)
-            continue
+    async def indices(self):
+        return self._scrip_fetcher.nse_indices
 
-    def fno_stocks(self):
-        return list(self.nse_fno_stocks)
-
-    def indices(self):
-        return list(self.nse_indices)
+    async def intraday_stocks(self):
+        return self._scrip_fetcher.nse_intraday_stocks
 
     async def symbols_by_index(self, symbol: str):
-        if symbol not in self.nse_indices:
+        if symbol not in self._scrip_fetcher.nse_indices:
             raise ValueError(f"{symbol} not an index!!!")
 
         orig = symbol
         symbol = quote_plus(symbol)
-        data = await self.client.get(
-            f"https://www.nseindia.com/api/equity-stockIndices?index={symbol}"
-        )
+        data = await self._client.get(f"/api/equity-stockIndices?index={symbol}")
         symbols = [s["symbol"] for s in data["data"]]
         filtered_symbols = [s for s in symbols if s != orig]
         return filtered_symbols
@@ -98,19 +79,17 @@ class NseGateway:
     async def price_band(self, symbol: str) -> str:
         """Get the price band for a given symbol."""
         symbol = quote_plus(symbol)
-        data = await self.client.get(
-            f"https://www.nseindia.com/api/quote-equity?symbol={symbol}"
-        )
+        data = await self._client.get(f"/api/quote-equity?symbol={symbol}")
         return data["priceInfo"]["pPriceBand"]
 
     async def recent_earnings(self) -> list[EarningResult]:
-        return await self.moneycontrol.earnings()
+        return await self._moneycontrol.earnings()
 
     async def insider_trades(self, symbol: str) -> list[dict]:
         """Get insider trading data for a given symbol."""
         symbol = quote_plus(symbol)
-        data = await self.client.get(
-            f"https://www.nseindia.com/api/corp-info?symbol={symbol}&corpType=insidertrading"
+        data = await self._client.get(
+            f"/api/corp-info?symbol={symbol}&corpType=insidertrading"
         )
         return [
             {
@@ -123,9 +102,7 @@ class NseGateway:
 
     async def industry(self, symbol: str) -> Optional[str]:
         symbol = quote_plus(symbol)
-        data = await self.client.get(
-            f"https://www.nseindia.com/api/equity-meta-info?symbol={symbol}"
-        )
+        data = await self._client.get(f"/api/equity-meta-info?symbol={symbol}")
         if data.get("isETFSec", False):
             logger.warning(f"ETF {symbol} does not have an industry")
             return None
@@ -142,7 +119,7 @@ class NseGateway:
         to_dt: date,
     ) -> CandleData:
         nse_interval, chart_period = self._get_interval(interval)
-        scrip_code = self.nse_scrip_codes.get(symbol)
+        scrip_code = self._scrip_fetcher.nse_scrip_codes.get(symbol)
         if not scrip_code:
             raise ValueError(f"{symbol} invalid")
 
@@ -191,7 +168,7 @@ class NseGateway:
         url: str,
         interval: ChartInterval,
     ) -> tuple[bool, Optional[dict]]:
-        data = await self.client.post(url, payload, headers=CHART_HEADERS)
+        data = await self._client.post(url, payload, headers=CHART_HEADERS)
         if isinstance(data, str):
             logger.debug(f"[{interval}] Failed data fetch for {symbol} with {data}")
             return False, None

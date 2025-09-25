@@ -10,8 +10,11 @@ async def main():
         earnings = await gateway.recent_earnings()
         print(f"Earnings: {earnings}")
 
-        indices = gateway.indices()
+        indices = await gateway.indices()
         print(f"Indices: {indices}")
+
+        intraday_stocks = await gateway.intraday_stocks()
+        print(f"Intraday stocks: {intraday_stocks}")
 
         symbols = await gateway.symbols_by_index("NIFTY IT")
         print(f"Symbols: {symbols}")
