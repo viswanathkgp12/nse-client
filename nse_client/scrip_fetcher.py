@@ -20,7 +20,6 @@ class ScripFetcher:
     def __init__(self, angel: AngelBrokingGateway):
         self._angel = angel
 
-        self.nse_scrip_codes: Dict[str, str] = {}
         self._nse_fno_stocks: Set[str] = set()
         self._nse_indices: Set[str] = set()
         self._nse_intraday_stocks: Set[str] = set()
@@ -36,7 +35,7 @@ class ScripFetcher:
             data = await self._fetch_and_cache_data()
         else:
             data = await self._load_cached_data()
-        self._process_scrips(data)
+        self._process(data)
 
     def _should_refresh_data(self) -> bool:
         if not os.path.exists(self._last_refresh_path) or not os.path.exists(
@@ -79,7 +78,7 @@ class ScripFetcher:
         except IOError as e:
             raise RuntimeError(f"Failed to save JSON to {path}: {e}") from e
 
-    def _process_scrips(self, data: List[Dict]) -> None:
+    def _process(self, data: List[Dict]) -> None:
         for scrip in data:
             exchange = scrip.get("exch_seg")
             name = scrip.get("name")
@@ -93,7 +92,6 @@ class ScripFetcher:
             if exchange == "NFO" and instrument_type == "OPTSTK":
                 self._nse_fno_stocks.add(name)
             elif exchange == "NSE":
-                self.nse_scrip_codes[name] = token
                 if instrument_type == "AMXIDX":
                     self._nse_indices.add(name)
                 if "-EQ" in symbol:

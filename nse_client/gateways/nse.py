@@ -1,8 +1,8 @@
 import asyncio
-from datetime import datetime
-import json
 import logging
-import os
+import pandas as pd
+import io
+from typing import Dict, Set
 from datetime import date
 from typing import Optional
 from urllib.parse import quote_plus
@@ -15,6 +15,7 @@ from tenacity import (
 from nse_client.gateways.types import CandleData, CandleDataList, EarningResult
 
 from nse_client.constants import (
+    CHARTING_BASE_URL,
     CHART_DATA_URL,
     CHART_HEADERS,
     FIVE_AND_HALF_HOURS_IN_SECS,
@@ -43,9 +44,13 @@ class NseGateway:
         self._scrip_fetcher = ScripFetcher(angel=self._angel)
         self._client = NseClient(base_url=NSE_BASE_URL, headers=NSE_HEADERS)
 
+        self.nse_scrip_codes: Dict[str, str] = {}
+        self._nse_indices: Set[str] = set()
+
     async def __aenter__(self):
         await self._scrip_fetcher.fetch()
         await self._client.initialize_session()
+        await self.scrip_codes()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -55,21 +60,63 @@ class NseGateway:
     async def fno_stocks(self):
         return self._scrip_fetcher.nse_fno_stocks
 
+    async def scrip_codes(self):
+        fno_data = await self._client.get(
+            f"{CHARTING_BASE_URL}/Charts/GetFOMasters", mode="str"
+        )
+        eq_data = await self._client.get(
+            f"{CHARTING_BASE_URL}/Charts/GetEQMasters", mode="str"
+        )
+
+        self._process_scrips(self._to_dict(fno_data))
+        self._process_scrips(self._to_dict(eq_data))
+
+    def _process_scrips(self, data: dict) -> None:
+        for name, data in data.items():
+            scrip = data.get("scrip_code")
+            desc = data.get("desc")
+            if 26_000 <= int(scrip) <= 26_500:
+                desc = desc.upper()
+                self.nse_scrip_codes[desc] = scrip
+                self._nse_indices.add(desc)
+                continue
+
+            name = name.upper()
+            if "-EQ" in name:
+                name = name.replace("-EQ", "")
+                self.nse_scrip_codes[name] = scrip
+
+    @staticmethod
+    def _to_dict(data):
+        df = pd.read_csv(io.StringIO(data), sep="|")
+        df_result = df[["TradingSymbol", "ScripCode", "Description"]]
+        return (
+            df_result.set_index("TradingSymbol")
+            .apply(
+                lambda row: {
+                    "scrip_code": row["ScripCode"],
+                    "desc": row["Description"],
+                },
+                axis=1,
+            )
+            .to_dict()
+        )
+
     async def etf(self):
         data = await self._client.get("/api/etf")
         return [s["symbol"] for s in data["data"]]
 
     async def indices(self):
-        return self._scrip_fetcher.nse_indices
+        return list(self._nse_indices)
 
     async def intraday_stocks(self):
         return self._scrip_fetcher.nse_intraday_stocks
 
     async def symbols_by_index(self, symbol: str):
-        if symbol not in self._scrip_fetcher.nse_indices:
+        if symbol not in self._nse_indices:
             raise ValueError(f"{symbol} not an index!!!")
 
-        orig = symbol
+        orig = symbol.upper()
         symbol = quote_plus(symbol)
         data = await self._client.get(f"/api/equity-stockIndices?index={symbol}")
         symbols = [s["symbol"] for s in data["data"]]
@@ -119,7 +166,7 @@ class NseGateway:
         to_dt: date,
     ) -> CandleData:
         nse_interval, chart_period = self._get_interval(interval)
-        scrip_code = self._scrip_fetcher.nse_scrip_codes.get(symbol)
+        scrip_code = self.nse_scrip_codes.get(symbol)
         if not scrip_code:
             raise ValueError(f"{symbol} invalid")
 
