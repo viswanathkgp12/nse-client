@@ -7,8 +7,8 @@ from datetime import date
 
 async def main():
     async with NseGateway() as gateway:
-        earnings = await gateway.recent_earnings()
-        print(f"Earnings: {earnings}")
+        # earnings = await gateway.recent_earnings()
+        # print(f"Earnings: {earnings}")
 
         indices = await gateway.indices()
         print(f"Indices: {indices}")
