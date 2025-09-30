@@ -7,7 +7,7 @@ A Python library for interacting with the National Stock Exchange (NSE) of India
 Download the latest `.whl` file from releases. Next install using:
 
 ```bash
-pip install nse_client-0.6.0-py3-none-any.whl
+pip install nse_client-0.7.0-py3-none-any.whl
 ```
 
 ## Features

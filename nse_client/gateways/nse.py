@@ -3,7 +3,7 @@ import logging
 import pandas as pd
 import io
 from typing import Dict, Set
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import Optional
 from urllib.parse import quote_plus
 
@@ -129,7 +129,23 @@ class NseGateway:
         data = await self._client.get(f"/api/quote-equity?symbol={symbol}")
         return data["priceInfo"]["pPriceBand"]
 
-    async def recent_earnings(self) -> list[EarningResult]:
+    async def ipo(self, days_to_lookback=270) -> list[EarningResult]:
+        current_ipo = await self._client.get(f"/api/ipo-current-issue")
+        symbols = [c["symbol"] for c in current_ipo if c["series"] == "EQ"]
+
+        to_date = datetime.now()
+        from_date = to_date - timedelta(days_to_lookback)
+        past_ipo = await self._client.get(
+            f"/api/public-past-issues",
+            params={
+                "from_date": from_date.strftime("%d-%m-%Y"),
+                "to_date": to_date.strftime("%d-%m-%Y"),
+            },
+        )
+        symbols.extend([c["symbol"] for c in past_ipo if c["securityType"] == "EQ"])
+        return symbols
+
+    async def recent_earnings(self) -> list[str]:
         return await self._moneycontrol.earnings()
 
     async def insider_trades(self, symbol: str) -> list[dict]:
@@ -242,7 +258,9 @@ class NseGateway:
         # Process symbols in batches
         for i in range(0, len(symbols), batch_size):
             batch_symbols = symbols[i : i + batch_size]
-            logger.info(f"Processing symbols from {i} to {i + batch_size}...")
+            logger.info(
+                f"[{interval}] Processing symbols from {i} to {i + batch_size}..."
+            )
 
             async def _fetch(symbol: str):
                 try:
