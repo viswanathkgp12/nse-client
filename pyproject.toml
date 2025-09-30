@@ -4,13 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nse-client"
-version = "0.7.0"
+version = "0.8.0"
 description = "A Python library for interacting with NSE (National Stock Exchange) APIs"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
 dependencies = [
     "aiohttp>=3.7.0",
+    "brotli>=1.1.0",
     "pandas>=2.3.2",
     "tenacity>=8.2.3",
 ]

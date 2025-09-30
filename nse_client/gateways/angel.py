@@ -6,7 +6,7 @@ class AngelBrokingGateway:
     async def list_instruments():
         url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
 
-        cli = HttpClient()
+        cli = HttpClient(timeout=10)
         try:
             return await cli.get(url)
         finally:
