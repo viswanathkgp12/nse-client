@@ -13,7 +13,7 @@ class ChartInterval(StrEnum):
 FIVE_AND_HALF_HOURS_IN_SECS = 19800
 
 CHARTING_BASE_URL = "https://charting.nseindia.com"
-CHART_DATA_URL = f"{CHARTING_BASE_URL}/Charts/symbolhistoricaldata/"
+CHART_DATA_URL = f"{CHARTING_BASE_URL}/Charts/symbolHistoricalData"
 CHART_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0",
     "Accept": "*/*",

@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import pandas as pd
 import io
@@ -42,7 +43,11 @@ class NseGateway:
         self._angel = AngelBrokingGateway()
         self._moneycontrol = MoneyControlGateway()
         self._scrip_fetcher = ScripFetcher(angel=self._angel)
-        self._client = NseClient(base_url=NSE_BASE_URL, headers=NSE_HEADERS)
+        self._client = NseClient(
+            base_url=NSE_BASE_URL,
+            headers=NSE_HEADERS,
+            timeout=30,
+        )
 
         self.nse_scrip_codes: Dict[str, str] = {}
         self._nse_indices: Set[str] = set()
@@ -61,26 +66,25 @@ class NseGateway:
         return self._scrip_fetcher.nse_fno_stocks
 
     async def scrip_codes(self):
-        fno_data = await self._client.get(
-            f"{CHARTING_BASE_URL}/Charts/GetFOMasters", mode="str"
+        all_data = await self._client.post(
+            f"{CHARTING_BASE_URL}/v1/exchanges/allSymbols",
+            {},
+            mode="str",
         )
-        eq_data = await self._client.get(
-            f"{CHARTING_BASE_URL}/Charts/GetEQMasters", mode="str"
-        )
+        json_data = json.loads(all_data)
+        self._process_scrips(json_data["data"])
 
-        self._process_scrips(self._to_dict(fno_data))
-        self._process_scrips(self._to_dict(eq_data))
-
-    def _process_scrips(self, data: dict) -> None:
-        for name, data in data.items():
-            scrip = data.get("scrip_code")
-            desc = data.get("desc")
+    def _process_scrips(self, res: list[dict]) -> None:
+        for data in res:
+            scrip = data.get("scripcode")
+            desc = data.get("description")
             if 26_000 <= int(scrip) <= 26_500:
                 desc = desc.upper()
                 self.nse_scrip_codes[desc] = scrip
                 self._nse_indices.add(desc)
                 continue
 
+            name = data.get("symbol")
             name = name.upper()
             if "-EQ" in name:
                 name = name.replace("-EQ", "")
