@@ -191,15 +191,13 @@ class NseGateway:
             raise ValueError(f"{symbol} invalid")
 
         payload = {
-            "exch": "N",
+            "chartType": chart_period,
             "fromDate": to_epoch(from_dt) + FIVE_AND_HALF_HOURS_IN_SECS,
+            "symbol": symbol + "-EQ",
+            "symbolType": "Equity",
             "toDate": to_epoch(to_dt) + FIVE_AND_HALF_HOURS_IN_SECS,
+            "token": str(scrip_code),
             "timeInterval": nse_interval,
-            "chartPeriod": chart_period,
-            "chartStart": 0,
-            "instrType": "C",
-            "scripCode": scrip_code,
-            "ulToken": scrip_code,
         }
 
         success, data = await self._scrape_chart_interval_data(

@@ -10,8 +10,8 @@ async def main():
         ipo = await gateway.ipo()
         print(f"IPO: {ipo}")
 
-        earnings = await gateway.recent_earnings()
-        print(f"Earnings: {earnings}")
+        # earnings = await gateway.recent_earnings()
+        # print(f"Earnings: {earnings}")
 
         indices = await gateway.indices()
         print(f"Indices: {indices}")
