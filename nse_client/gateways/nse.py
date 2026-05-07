@@ -233,15 +233,31 @@ class NseGateway:
         url: str,
         interval: ChartInterval,
     ) -> tuple[bool, Optional[dict]]:
-        data = await self._client.post(url, payload, headers=CHART_HEADERS)
+        data = await self._client.get(url, payload, headers=CHART_HEADERS)
         if isinstance(data, str):
             logger.debug(f"[{interval}] Failed data fetch for {symbol} with {data}")
             return False, None
 
-        if data.get("s") == "Ok":
-            return True, data
+        if data.get("status"):
+            return True, self._transform_dict(data.get("data", {}))
         logger.debug(f"[{interval}] Failed data fetch for {symbol} with {data}")
         return False, None
+
+    def _transform_dict(self, data_list):
+        """
+        Renames dictionary keys to o, h, l, c, v, t.
+        """
+        return [
+            {
+                "o": d["open"],
+                "h": d["high"],
+                "l": d["low"],
+                "c": d["close"],
+                "v": d["volume"],
+                "t": d["time"],
+            }
+            for d in data_list
+        ]
 
     async def candles(
         self,

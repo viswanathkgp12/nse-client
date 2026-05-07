@@ -22,12 +22,14 @@ class HttpClient:
         self,
         url: str,
         params: dict = None,
+        headers=None,
         mode: Literal["json", "str"] = "json",
     ):
         return await self._request(
             url,
             method="GET",
             params=params,
+            headers=headers,
             mode=mode,
         )
 
