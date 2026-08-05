@@ -77,11 +77,11 @@ class NseGateway:
     def _process_scrips(self, res: list[dict]) -> None:
         for data in res:
             scrip = data.get("scripcode")
-            desc = data.get("description")
+            symbol = data.get("symbol")
             if 26_000 <= int(scrip) <= 26_500:
-                desc = desc.upper()
-                self.nse_scrip_codes[desc] = scrip
-                self._nse_indices.add(desc)
+                symbol = symbol.upper()
+                self.nse_scrip_codes[symbol] = scrip
+                self._nse_indices.add(symbol)
                 continue
 
             name = data.get("symbol")
@@ -122,8 +122,8 @@ class NseGateway:
 
         orig = symbol.upper()
         symbol = quote_plus(symbol)
-        data = await self._client.get(f"/api/equity-stockIndices?index={symbol}")
-        symbols = [s["symbol"] for s in data["data"]]
+        data = await self._client.get(f"/api/NextApi/apiClient/indexTrackerApi?functionName=getAllIndicesSymbols&index={symbol}")
+        symbols = data["data"]
         filtered_symbols = [s for s in symbols if s != orig]
         return filtered_symbols
 
@@ -169,14 +169,21 @@ class NseGateway:
 
     async def industry(self, symbol: str) -> Optional[str]:
         symbol = quote_plus(symbol)
-        data = await self._client.get(f"/api/equity-meta-info?symbol={symbol}")
-        if data.get("isETFSec", False):
-            logger.warning(f"ETF {symbol} does not have an industry")
+        data = await self._client.get(
+            f"/api/NextApi/apiClient/GetQuoteApi?functionName=getSymbolData&marketType=N&series=EQ&symbol={symbol}"
+        )
+        if "equityResponse" not in data:
+            logger.warning(f"{symbol} does not have equity info")
             return None
-        if "industry" not in data:
+        equity_response = data["equityResponse"]
+        if not equity_response:
+            logger.warning(f"{symbol} does not have equity info")
+            return None
+        sec_info = equity_response[0].get("secInfo") if isinstance(equity_response[0], dict) else None
+        if not sec_info or "basicIndustry" not in sec_info:
             logger.warning(f"{symbol} does not have an industry")
             return None
-        return data["industry"]
+        return sec_info["basicIndustry"]
 
     async def candle(
         self,
