@@ -2,6 +2,7 @@ from enum import StrEnum
 
 
 class ChartInterval(StrEnum):
+    FIVE_MINUTES = "5m"
     FIFTEEN_MINUTES = "15m"
     ONE_HOUR = "1h"
     FOUR_HOURS = "4h"

@@ -46,6 +46,7 @@ async def main():
             from_dt=from_dt,
             to_dt=to_dt,
         )
+        price_band_changes = await gateway.price_band_changes()
 
 
 if __name__ == "__main__":

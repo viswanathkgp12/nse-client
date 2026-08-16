@@ -51,6 +51,7 @@ class NseGateway:
 
         self.nse_scrip_codes: Dict[str, str] = {}
         self._nse_indices: Set[str] = set()
+        self.nse_scrip_exchange: Dict[str, str] = {}
 
     async def __aenter__(self):
         await self._scrip_fetcher.fetch()
@@ -89,6 +90,10 @@ class NseGateway:
             if "-EQ" in name:
                 name = name.replace("-EQ", "")
                 self.nse_scrip_codes[name] = scrip
+                self.nse_scrip_exchange[name] = "EQ"
+            if "-BE" in name:
+                name = name.replace("-BE", "")
+                self.nse_scrip_exchange[name] = "BE"
 
     @staticmethod
     def _to_dict(data):
@@ -122,7 +127,9 @@ class NseGateway:
 
         orig = symbol.upper()
         symbol = quote_plus(symbol)
-        data = await self._client.get(f"/api/NextApi/apiClient/indexTrackerApi?functionName=getAllIndicesSymbols&index={symbol}")
+        data = await self._client.get(
+            f"/api/NextApi/apiClient/indexTrackerApi?functionName=getAllIndicesSymbols&index={symbol}"
+        )
         symbols = data["data"]
         filtered_symbols = [s for s in symbols if s != orig]
         return filtered_symbols
@@ -152,6 +159,32 @@ class NseGateway:
     async def recent_earnings(self) -> list[str]:
         return await self._moneycontrol.earnings()
 
+    async def price_band_changes(self, days_to_lookback=30) -> list[dict]:
+        today = datetime.now()
+        end_dt = today.strftime("%d-%m-%Y")
+        start_dt = (today - timedelta(days=days_to_lookback)).strftime("%d-%m-%Y")
+        data = await self._client.get(
+            f"api/eqsurvactions?from_date={start_dt}&to_date={end_dt}"
+        )
+        changes = []
+        for item in data:
+            from_price_band = item["fromPriceBand"]
+            to_price_band = item["toPriceBand"]
+            if from_price_band is None or from_price_band == "No Band":
+                from_price_band = 0
+            if to_price_band is None or to_price_band == "No Band":
+                to_price_band = 0
+
+            change = {
+                "symbol": item["symbol"],
+                "effectiveDate": item["effectiveDate"],
+                "fromPriceBand": int(from_price_band),
+                "toPriceBand": int(to_price_band),
+                "change": int(to_price_band) - int(from_price_band),
+            }
+            changes.append(change)
+        return changes
+
     async def insider_trades(self, symbol: str) -> list[dict]:
         """Get insider trading data for a given symbol."""
         symbol = quote_plus(symbol)
@@ -169,8 +202,9 @@ class NseGateway:
 
     async def industry(self, symbol: str) -> Optional[str]:
         symbol = quote_plus(symbol)
+        exchange = self.nse_scrip_exchange.get(symbol, "EQ")
         data = await self._client.get(
-            f"/api/NextApi/apiClient/GetQuoteApi?functionName=getSymbolData&marketType=N&series=EQ&symbol={symbol}"
+            f"/api/NextApi/apiClient/GetQuoteApi?functionName=getSymbolData&marketType=N&series={exchange}&symbol={symbol}"
         )
         if "equityResponse" not in data:
             logger.warning(f"{symbol} does not have equity info")
@@ -179,7 +213,11 @@ class NseGateway:
         if not equity_response:
             logger.warning(f"{symbol} does not have equity info")
             return None
-        sec_info = equity_response[0].get("secInfo") if isinstance(equity_response[0], dict) else None
+        sec_info = (
+            equity_response[0].get("secInfo")
+            if isinstance(equity_response[0], dict)
+            else None
+        )
         if not sec_info or "basicIndustry" not in sec_info:
             logger.warning(f"{symbol} does not have an industry")
             return None
@@ -197,10 +235,11 @@ class NseGateway:
         if not scrip_code:
             raise ValueError(f"{symbol} invalid")
 
+        exchange = self.nse_scrip_exchange.get(symbol, "EQ")
         payload = {
             "chartType": chart_period,
             "fromDate": to_epoch(from_dt) + FIVE_AND_HALF_HOURS_IN_SECS,
-            "symbol": symbol + "-EQ",
+            "symbol": symbol + f"-{exchange}",
             "symbolType": "Equity",
             "toDate": to_epoch(to_dt) + FIVE_AND_HALF_HOURS_IN_SECS,
             "token": str(scrip_code),
@@ -221,6 +260,7 @@ class NseGateway:
     def _get_interval(interval: ChartInterval) -> tuple[int, str]:
         """Map ChartInterval to NSE-specific interval and chart period."""
         interval_map = {
+            ChartInterval.FIVE_MINUTES: (5, "I"),
             ChartInterval.FIFTEEN_MINUTES: (15, "I"),
             ChartInterval.ONE_HOUR: (60, "I"),
             ChartInterval.FOUR_HOURS: (240, "I"),
