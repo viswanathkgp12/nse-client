@@ -134,11 +134,35 @@ class NseGateway:
         filtered_symbols = [s for s in symbols if s != orig]
         return filtered_symbols
 
-    async def price_band(self, symbol: str) -> str:
+    async def price_band(self, symbol: str) -> Optional[int]:
         """Get the price band for a given symbol."""
+        equity_response = await self._equity_response(symbol)
+        price_info = (
+            equity_response[0].get("priceInfo")
+            if isinstance(equity_response[0], dict)
+            else None
+        )
+        if not price_info:
+            return None
+        band = price_info["ppriceBand"]
+        if band and band != "No Band":
+            return int(band)
+        return 20
+
+    async def _equity_response(self, symbol: str):
         symbol = quote_plus(symbol)
-        data = await self._client.get(f"/api/quote-equity?symbol={symbol}")
-        return data["priceInfo"]["pPriceBand"]
+        exchange = self.nse_scrip_exchange.get(symbol, "EQ")
+        data = await self._client.get(
+            f"/api/NextApi/apiClient/GetQuoteApi?functionName=getSymbolData&marketType=N&series={exchange}&symbol={symbol}"
+        )
+        if "equityResponse" not in data:
+            logger.warning(f"{symbol} does not have equity info")
+            return None
+        equity_response = data["equityResponse"]
+        if not equity_response:
+            logger.warning(f"{symbol} does not have equity info")
+            return None
+        return equity_response
 
     async def ipo(self, days_to_lookback=270) -> list[EarningResult]:
         current_ipo = await self._client.get(f"/api/ipo-current-issue")
@@ -200,28 +224,26 @@ class NseGateway:
             for record in data
         ]
 
-    async def industry(self, symbol: str) -> Optional[str]:
-        symbol = quote_plus(symbol)
-        exchange = self.nse_scrip_exchange.get(symbol, "EQ")
-        data = await self._client.get(
-            f"/api/NextApi/apiClient/GetQuoteApi?functionName=getSymbolData&marketType=N&series={exchange}&symbol={symbol}"
-        )
-        if "equityResponse" not in data:
-            logger.warning(f"{symbol} does not have equity info")
-            return None
-        equity_response = data["equityResponse"]
-        if not equity_response:
-            logger.warning(f"{symbol} does not have equity info")
-            return None
+    async def industry(self, symbol: str) -> Optional[dict]:
+        equity_response = await self._equity_response(symbol)
         sec_info = (
             equity_response[0].get("secInfo")
             if isinstance(equity_response[0], dict)
             else None
         )
-        if not sec_info or "basicIndustry" not in sec_info:
+        if (
+            not sec_info
+            or "basicIndustry" not in sec_info
+            or "industryInfo" not in sec_info
+            or "sector" not in sec_info
+        ):
             logger.warning(f"{symbol} does not have an industry")
             return None
-        return sec_info["basicIndustry"]
+        return {
+            "subIndustry": sec_info["basicIndustry"],
+            "industry": sec_info["industryInfo"],
+            "sector": sec_info["sector"],
+        }
 
     async def candle(
         self,

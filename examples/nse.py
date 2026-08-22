@@ -26,8 +26,11 @@ async def main():
         price_band = await gateway.price_band(symbol)
         print(f"Price band for {symbol} is {price_band}")
 
-        industry = await gateway.industry(symbol)
-        print(f"Basic Industry for {symbol} is {industry}")
+        industry_info = await gateway.industry(symbol)
+        sub_industry = industry_info["subIndustry"]
+        sector = industry_info["sector"]
+        industry = industry_info["industry"]
+        print(f"Symbol: {symbol} Sector: {sector} Industry: {industry} Sub Industry: {sub_industry}")
 
         insider_trades = await gateway.insider_trades(symbol)
         print(f"Insider trades for {symbol} - {json.dumps(insider_trades)}")
